@@ -30,7 +30,13 @@ SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
 SMTP_USE_TLS = os.getenv("SMTP_USE_TLS", "true").lower() in {"1", "true", "yes"}
 ALERT_EMAIL_FROM = os.getenv("ALERT_EMAIL_FROM", "")
 ALERT_EMAIL_TO = os.getenv("ALERT_EMAIL_TO", "")
-# both | breakeven | rise
-ALERT_MODE = os.getenv("ALERT_MODE", "both")
+# both | breakeven | rise | spike | all  (comma-separated OK, e.g. rise,spike)
+# "both" and "all" enable breakeven + rise + spike
+ALERT_MODE = os.getenv("ALERT_MODE", "all")
 # Daily rise % while still below average cost
 ALERT_RISE_PCT = float(os.getenv("ALERT_RISE_PCT", "3"))
+# Sudden jump from a recent low
+ALERT_SPIKE_PCT = float(os.getenv("ALERT_SPIKE_PCT", "5"))
+ALERT_SPIKE_LOOKBACK_DAYS = int(os.getenv("ALERT_SPIKE_LOOKBACK_DAYS", "10"))
+# Previous close must be within this % of the N-day low
+ALERT_NEAR_LOW_PCT = float(os.getenv("ALERT_NEAR_LOW_PCT", "3"))

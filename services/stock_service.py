@@ -249,3 +249,83 @@ class StockService:
         if summary.get("status") == "success":
             return float(summary["current_price"])
         return None
+
+    @staticmethod
+    def detect_sudden_spike(
+        symbol: str,
+        spike_pct: float = 5.0,
+        lookback_days: int = 10,
+        near_low_pct: float = 3.0,
+        summary: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Detect a sudden jump from a recent low.
+
+        Conditions:
+        - Today's move >= spike_pct
+        - Previous close was within near_low_pct of the recent N-day low
+          (stock was "düşük" before the jump)
+        """
+        symbol = StockService._normalize_symbol(symbol)
+        if StockService._is_tefas_fund(symbol):
+            return {"symbol": symbol, "is_spike": False, "status": "skipped", "reason": "fund"}
+
+        try:
+            if summary is None or summary.get("status") != "success":
+                summary = StockService.get_stock_summary(symbol)
+            if summary.get("status") != "success":
+                return {
+                    "symbol": symbol,
+                    "is_spike": False,
+                    "status": "error",
+                    "error": summary.get("error", "no summary"),
+                }
+
+            daily_pct = float(summary.get("daily_change_pct") or 0)
+            current_price = float(summary.get("current_price") or 0)
+            previous_close = float(summary.get("previous_close") or 0)
+
+            ticker = yf.Ticker(symbol)
+            # Extra buffer days for weekends/holidays
+            hist = ticker.history(period=f"{max(lookback_days + 5, 15)}d")
+            if hist is None or hist.empty or "Low" not in hist.columns:
+                return {
+                    "symbol": symbol,
+                    "is_spike": False,
+                    "status": "error",
+                    "error": "no history",
+                }
+
+            # Exclude today from the "was low" baseline when possible
+            baseline = hist.iloc[:-1] if len(hist) > 1 else hist
+            baseline = baseline.tail(lookback_days)
+            recent_low = float(baseline["Low"].min())
+            if recent_low <= 0 or previous_close <= 0:
+                return {"symbol": symbol, "is_spike": False, "status": "error", "error": "bad prices"}
+
+            near_low_ceiling = recent_low * (1 + near_low_pct / 100.0)
+            was_near_low = previous_close <= near_low_ceiling
+            jumped = daily_pct >= spike_pct
+            is_spike = bool(jumped and was_near_low)
+
+            return {
+                "symbol": symbol,
+                "is_spike": is_spike,
+                "status": "success",
+                "daily_change_pct": round(daily_pct, 2),
+                "current_price": round(current_price, 4),
+                "previous_close": round(previous_close, 4),
+                "recent_low": round(recent_low, 4),
+                "near_low_ceiling": round(near_low_ceiling, 4),
+                "was_near_low": was_near_low,
+                "lookback_days": lookback_days,
+                "spike_pct": spike_pct,
+                "near_low_pct": near_low_pct,
+            }
+        except Exception as exc:
+            return {
+                "symbol": symbol,
+                "is_spike": False,
+                "status": "error",
+                "error": str(exc),
+            }
