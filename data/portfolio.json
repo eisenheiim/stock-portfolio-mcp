@@ -1,0 +1,22 @@
+{
+  "holdings": {
+    "AAPL": {
+      "shares": 10,
+      "average_cost": 150.25,
+      "total_cost": 1502.50,
+      "purchase_dates": [
+        "2025-01-15",
+        "2025-02-20"
+      ]
+    },
+    "THYAO.IS": {
+      "shares": 50,
+      "average_cost": 45.30,
+      "total_cost": 2265.00,
+      "purchase_dates": [
+        "2025-01-10"
+      ]
+    }
+  },
+  "last_updated": "2026-08-10T10:00:00"
+}
