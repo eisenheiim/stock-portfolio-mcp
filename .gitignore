@@ -41,6 +41,14 @@ env/
 .env
 .env.local
 
+# Personal portfolio data (use *.example.json templates)
+data/portfolio.json
+data/watchlist.json
+data/alert_state.json
+
+# Local Cursor rules / IDE
+.cursor/
+
 # Testing
 .pytest_cache/
 .coverage

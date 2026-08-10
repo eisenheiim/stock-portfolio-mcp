@@ -54,12 +54,13 @@ Server running... Press Ctrl+C to stop
    Or directly edit: `~/.cursor/settings.json`
 
 2. Add MCP server configuration:
+   > Note: if you see `spawn python ENOENT`, use the full path to your Python executable instead of `python`. For this project, the venv interpreter is `/Users/sude/stockmarket/venv/bin/python`.
    ```json
    {
      "extensions.ignoreRecommendations": true,
      "mcp": {
        "stock-tracker": {
-         "command": "python",
+         "command": "/Users/sude/stockmarket/venv/bin/python",
          "args": ["/Users/sude/stockmarket/main.py"],
          "env": {
            "HOST": "0.0.0.0",
@@ -77,7 +78,7 @@ Server running... Press Ctrl+C to stop
 3. Search for "MCP"
 4. Add new MCP server:
    - Name: `stock-tracker`
-   - Command: `python`
+   - Command: `/Users/sude/stockmarket/venv/bin/python`
    - Args: `/Users/sude/stockmarket/main.py`
    - Environment: `HOST=0.0.0.0, PORT=8000`
 
@@ -90,7 +91,7 @@ Server running... Press Ctrl+C to stop
    ```json
    {
      "stock-tracker": {
-       "command": "python",
+       "command": "/Users/sude/stockmarket/venv/bin/python",
        "args": ["/Users/sude/stockmarket/main.py"],
        "env": {
          "HOST": "0.0.0.0",

@@ -19,24 +19,27 @@ class PortfolioService:
         """Ensure portfolio.json exists with default structure."""
         if not os.path.exists(PORTFOLIO_FILE):
             default_portfolio = {
-                "holdings": {
-                    "AAPL": {
-                        "shares": 10,
-                        "average_cost": 150.25,
-                        "total_cost": 1502.50,
-                        "purchase_dates": ["2025-01-15", "2025-02-20"]
-                    },
-                    "THYAO.IS": {
-                        "shares": 50,
-                        "average_cost": 45.30,
-                        "total_cost": 2265.00,
-                        "purchase_dates": ["2025-01-10"]
-                    }
-                },
+                "positions": [],
                 "last_updated": datetime.now().isoformat()
             }
             with open(PORTFOLIO_FILE, "w") as f:
                 json.dump(default_portfolio, f, indent=2)
+
+    @staticmethod
+    def _iter_positions(portfolio: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        Normalize portfolio into a list of position dicts.
+        Supports broker-split `positions` and legacy `holdings` map.
+        """
+        if portfolio.get("positions"):
+            return list(portfolio["positions"])
+
+        legacy = []
+        for symbol, holding in portfolio.get("holdings", {}).items():
+            row = dict(holding)
+            row["symbol"] = symbol
+            legacy.append(row)
+        return legacy
 
     @staticmethod
     def _ensure_watchlist_exists() -> None:
@@ -137,9 +140,9 @@ class PortfolioService:
         """
         try:
             portfolio = PortfolioService.load_portfolio()
-            holdings = portfolio.get("holdings", {})
+            raw_positions = PortfolioService._iter_positions(portfolio)
 
-            if not holdings:
+            if not raw_positions:
                 return {
                     "status": "empty",
                     "message": "Portfolio is empty",
@@ -147,62 +150,141 @@ class PortfolioService:
                     "total_current_value": 0,
                     "total_pnl": 0,
                     "total_pnl_pct": 0,
-                    "positions": []
+                    "positions": [],
+                    "by_broker": []
                 }
 
             positions = []
             total_cost_basis = 0
             total_current_value = 0
+            price_cache: Dict[str, Any] = {}
+            currency_totals: Dict[str, Dict[str, float]] = {}
 
-            for symbol, holding in holdings.items():
+            for holding in raw_positions:
+                symbol = holding.get("symbol", "")
                 shares = holding.get("shares", 0)
                 average_cost = holding.get("average_cost", 0)
                 total_cost = holding.get("total_cost", shares * average_cost)
+                asset_type = holding.get("asset_type", "stock")
+                currency = holding.get("currency", "TRY")
+                summary: Dict[str, Any] = {}
 
-                current_price = StockService.get_stock_price(symbol)
+                if asset_type == "fund" and holding.get("last_price") is not None:
+                    current_price = holding.get("last_price")
+                    price_source = "report"
+                    summary = {"as_of": portfolio.get("report_date", "N/A")}
+                else:
+                    if symbol not in price_cache:
+                        price_cache[symbol] = StockService.get_stock_summary(symbol)
+                    summary = price_cache[symbol]
+                    price_source = summary.get("source", "unknown")
+                    current_price = summary.get("current_price")
+                    if current_price is None:
+                        current_price = holding.get("last_price") or average_cost
+                        price_source = "report_fallback"
 
                 if current_price is None:
                     continue
 
+                current_price = float(current_price)
                 current_value = shares * current_price
                 position_pnl = current_value - total_cost
                 position_pnl_pct = (position_pnl / total_cost * 100) if total_cost else 0
+                is_fund = asset_type == "fund"
 
                 positions.append({
+                    "broker": holding.get("broker", "Unknown"),
+                    "account": holding.get("account"),
                     "symbol": symbol,
+                    "name": holding.get("name"),
+                    "asset_type": asset_type,
+                    "currency": currency,
                     "shares": shares,
-                    "average_cost": round(average_cost, 2),
+                    "average_cost": round(average_cost, 6) if is_fund else round(average_cost, 4),
                     "total_cost": round(total_cost, 2),
-                    "current_price": round(current_price, 2),
+                    "current_price": round(current_price, 6) if is_fund else round(current_price, 4),
                     "current_value": round(current_value, 2),
                     "pnl": round(position_pnl, 2),
-                    "pnl_pct": round(position_pnl_pct, 2)
+                    "pnl_pct": round(position_pnl_pct, 2),
+                    "price_source": price_source,
+                    "as_of": summary.get("as_of"),
                 })
 
-                total_cost_basis += total_cost
-                total_current_value += current_value
+                # Main totals stay TRY-only so USD positions are not mixed in.
+                if currency == "TRY":
+                    total_cost_basis += total_cost
+                    total_current_value += current_value
+
+                c_bucket = currency_totals.setdefault(
+                    currency, {"cost": 0.0, "value": 0.0, "pnl": 0.0}
+                )
+                c_bucket["cost"] += total_cost
+                c_bucket["value"] += current_value
+                c_bucket["pnl"] += position_pnl
 
             total_pnl = total_current_value - total_cost_basis
             total_pnl_pct = (total_pnl / total_cost_basis * 100) if total_cost_basis else 0
 
-            # Calculate asset allocation
             allocation = []
             for position in positions:
-                pct = (position["current_value"] / total_current_value * 100) if total_current_value else 0
+                if position["currency"] != "TRY" or not total_current_value:
+                    pct = 0
+                else:
+                    pct = position["current_value"] / total_current_value * 100
                 allocation.append({
                     "symbol": position["symbol"],
+                    "broker": position["broker"],
+                    "currency": position["currency"],
                     "percentage": round(pct, 2),
                     "value": position["current_value"]
                 })
 
+            broker_totals: Dict[str, Dict[str, float]] = {}
+            for position in positions:
+                if position["currency"] != "TRY":
+                    continue
+                broker = position["broker"]
+                bucket = broker_totals.setdefault(
+                    broker, {"value": 0.0, "cost": 0.0, "pnl": 0.0}
+                )
+                bucket["value"] += position["current_value"]
+                bucket["cost"] += position["total_cost"]
+                bucket["pnl"] += position["pnl"]
+
+            by_broker = []
+            for broker, bucket in broker_totals.items():
+                pct = (bucket["value"] / total_current_value * 100) if total_current_value else 0
+                by_broker.append({
+                    "broker": broker,
+                    "currency": "TRY",
+                    "value": round(bucket["value"], 2),
+                    "cost": round(bucket["cost"], 2),
+                    "pnl": round(bucket["pnl"], 2),
+                    "percentage": round(pct, 2),
+                })
+
+            by_currency = []
+            for currency, bucket in currency_totals.items():
+                pnl_pct = (bucket["pnl"] / bucket["cost"] * 100) if bucket["cost"] else 0
+                by_currency.append({
+                    "currency": currency,
+                    "cost": round(bucket["cost"], 2),
+                    "value": round(bucket["value"], 2),
+                    "pnl": round(bucket["pnl"], 2),
+                    "pnl_pct": round(pnl_pct, 2),
+                })
+
             return {
                 "status": "success",
+                "currency_note": "Main totals are TRY-only; see by_currency for USD",
                 "total_cost_basis": round(total_cost_basis, 2),
                 "total_current_value": round(total_current_value, 2),
                 "total_pnl": round(total_pnl, 2),
                 "total_pnl_pct": round(total_pnl_pct, 2),
                 "positions": positions,
                 "allocation": allocation,
+                "by_broker": by_broker,
+                "by_currency": by_currency,
                 "last_updated": portfolio.get("last_updated", "N/A")
             }
 
@@ -218,18 +300,61 @@ class PortfolioService:
         """
         Add a buy transaction to portfolio or update existing holding.
 
-        Args:
-            symbol: Stock ticker symbol
-            shares: Number of shares to purchase
-            buy_price: Purchase price per share
-
-        Returns:
-            Result dictionary with status and updated holding info
+        If the portfolio uses broker-split positions and the symbol exists in
+        exactly one broker row, that row is updated. Otherwise a new unassigned
+        position is appended.
         """
         try:
             portfolio = PortfolioService.load_portfolio()
-            holdings = portfolio.get("holdings", {})
 
+            # Prefer broker-split positions format.
+            if "positions" in portfolio or not portfolio.get("holdings"):
+                positions = list(portfolio.get("positions", []))
+                matches = [p for p in positions if p.get("symbol") == symbol]
+
+                if len(matches) == 1:
+                    holding = matches[0]
+                else:
+                    holding = {
+                        "broker": "Unassigned",
+                        "account": "",
+                        "symbol": symbol,
+                        "shares": 0,
+                        "average_cost": 0,
+                        "total_cost": 0,
+                        "asset_type": "stock",
+                        "purchase_dates": []
+                    }
+                    positions.append(holding)
+
+                old_shares = holding.get("shares", 0)
+                old_total_cost = holding.get("total_cost", 0)
+                new_transaction_cost = shares * buy_price
+                new_total_shares = old_shares + shares
+                new_total_cost = old_total_cost + new_transaction_cost
+                new_average_cost = new_total_cost / new_total_shares if new_total_shares > 0 else 0
+
+                holding["shares"] = new_total_shares
+                holding["average_cost"] = new_average_cost
+                holding["total_cost"] = new_total_cost
+                holding.setdefault("purchase_dates", []).append(datetime.now().isoformat())
+
+                portfolio["positions"] = positions
+                portfolio.pop("holdings", None)
+
+                if PortfolioService.save_portfolio(portfolio):
+                    return {
+                        "status": "success",
+                        "message": f"Added {shares} shares of {symbol}",
+                        "symbol": symbol,
+                        "broker": holding.get("broker"),
+                        "new_shares": new_total_shares,
+                        "average_cost": round(new_average_cost, 2),
+                        "total_cost": round(new_total_cost, 2)
+                    }
+                return {"status": "error", "message": "Failed to save portfolio"}
+
+            holdings = portfolio.get("holdings", {})
             if symbol not in holdings:
                 holdings[symbol] = {
                     "shares": 0,
@@ -242,7 +367,6 @@ class PortfolioService:
             old_shares = holding.get("shares", 0)
             old_total_cost = holding.get("total_cost", 0)
             new_transaction_cost = shares * buy_price
-
             new_total_shares = old_shares + shares
             new_total_cost = old_total_cost + new_transaction_cost
             new_average_cost = new_total_cost / new_total_shares if new_total_shares > 0 else 0
@@ -251,7 +375,6 @@ class PortfolioService:
             holding["average_cost"] = new_average_cost
             holding["total_cost"] = new_total_cost
             holding["purchase_dates"].append(datetime.now().isoformat())
-
             portfolio["holdings"] = holdings
 
             if PortfolioService.save_portfolio(portfolio):
@@ -263,11 +386,7 @@ class PortfolioService:
                     "average_cost": round(new_average_cost, 2),
                     "total_cost": round(new_total_cost, 2)
                 }
-            else:
-                return {
-                    "status": "error",
-                    "message": "Failed to save portfolio"
-                }
+            return {"status": "error", "message": "Failed to save portfolio"}
 
         except Exception as e:
             return {

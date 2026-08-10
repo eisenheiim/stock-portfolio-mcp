@@ -22,13 +22,14 @@ mcp = FastMCP("stock-tracker")
 @mcp.tool()
 def get_stock_summary(symbol: str) -> dict:
     """
-    Get current stock summary including price, daily change, and volume.
+    Get LIVE stock/fund price at the moment of the request (no cached prices).
+    Uses Yahoo Finance for equities/ETFs and TEFAS for Turkish mutual funds.
 
     Args:
-        symbol: Stock ticker symbol (e.g., "AAPL", "THYAO.IS", "NVDA")
+        symbol: Stock ticker (e.g. "AAPL", "BIMAS.IS") or TEFAS fund code (e.g. "TP2", "AIS")
 
     Returns:
-        Stock summary with current price, daily change, and volume
+        Live summary with current_price, daily_change, volume, source, and as_of date
     """
     return stock_tools.get_stock_summary(symbol)
 
@@ -51,10 +52,11 @@ def get_financial_metrics(symbol: str) -> dict:
 @mcp.tool()
 def get_portfolio_status() -> dict:
     """
-    Get comprehensive portfolio status with current values, P&L, and allocation.
+    Get portfolio status with LIVE prices fetched at request time for every holding.
+    Revalues all positions (BIST stocks via Yahoo, Turkish funds via TEFAS) when called.
 
     Returns:
-        Portfolio status including total value, positions, P&L, and asset allocation
+        Portfolio status including total value, positions, P&L, allocation, and price sources
     """
     return portfolio_tools.get_portfolio_status()
 

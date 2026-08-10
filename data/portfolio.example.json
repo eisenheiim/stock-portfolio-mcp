@@ -1,0 +1,30 @@
+{
+  "positions": [
+    {
+      "broker": "Example Broker",
+      "account": "0000000",
+      "symbol": "AAPL",
+      "shares": 10,
+      "average_cost": 150.25,
+      "total_cost": 1502.5,
+      "currency": "USD",
+      "asset_type": "stock",
+      "name": "Apple Inc.",
+      "purchase_dates": ["2025-01-15"]
+    },
+    {
+      "broker": "Example Broker",
+      "account": "0000000",
+      "symbol": "THYAO.IS",
+      "shares": 50,
+      "average_cost": 45.3,
+      "total_cost": 2265.0,
+      "currency": "TRY",
+      "asset_type": "stock",
+      "name": "Turkish Airlines",
+      "purchase_dates": ["2025-01-10"]
+    }
+  ],
+  "source": "example",
+  "last_updated": "2026-08-10T10:00:00"
+}
