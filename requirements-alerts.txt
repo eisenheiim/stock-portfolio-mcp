@@ -1,0 +1,5 @@
+# Minimal deps for scripts/check_alerts.py (GitHub Actions / cron)
+# No fastmcp — alerts only need price fetch + email
+yfinance>=0.2.32
+python-dotenv>=1.0.0
+requests>=2.31.0

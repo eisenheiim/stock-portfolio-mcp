@@ -25,7 +25,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - run: pip install -r requirements.txt
+      - run: pip install -r requirements-alerts.txt
 
       # Remember alert state between runs (avoid duplicate emails)
       - uses: actions/cache@v4
