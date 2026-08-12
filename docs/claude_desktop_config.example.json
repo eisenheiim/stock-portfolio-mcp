@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "stock-tracker": {
+      "command": "/path/to/stockmcp/venv/bin/python",
+      "args": ["/path/to/stockmcp/main.py"],
+      "env": {
+        "HOST": "0.0.0.0",
+        "PORT": "8000"
+      }
+    }
+  }
+}

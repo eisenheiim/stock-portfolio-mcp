@@ -2,23 +2,20 @@
 """
 Financial & Portfolio Tracker MCP Server
 Main entry point for the FastMCP server.
-Initializes the server and binds all available tools.
 """
 
 import os
 import sys
+
 from fastmcp import FastMCP
 
-# Import tools
-from tools import stock_tools, portfolio_tools
 from config import HOST, PORT
+from services.portfolio_service import PortfolioService
+from services.stock_service import StockService
 
-
-# Initialize FastMCP server
 mcp = FastMCP("stock-tracker")
 
 
-# Register Stock Tools
 @mcp.tool()
 def get_stock_summary(symbol: str) -> dict:
     """
@@ -31,7 +28,7 @@ def get_stock_summary(symbol: str) -> dict:
     Returns:
         Live summary with current_price, daily_change, volume, source, and as_of date
     """
-    return stock_tools.get_stock_summary(symbol)
+    return StockService.get_stock_summary(symbol)
 
 
 @mcp.tool()
@@ -45,20 +42,18 @@ def get_financial_metrics(symbol: str) -> dict:
     Returns:
         Financial metrics including P/E, P/B, market cap, and sector info
     """
-    return stock_tools.get_financial_metrics(symbol)
+    return StockService.get_financial_metrics(symbol)
 
 
-# Register Portfolio Tools
 @mcp.tool()
 def get_portfolio_status() -> dict:
     """
     Get portfolio status with LIVE prices fetched at request time for every holding.
-    Revalues all positions (BIST stocks via Yahoo, Turkish funds via TEFAS) when called.
 
     Returns:
         Portfolio status including total value, positions, P&L, allocation, and price sources
     """
-    return portfolio_tools.get_portfolio_status()
+    return PortfolioService.get_portfolio_status()
 
 
 @mcp.tool()
@@ -74,7 +69,7 @@ def add_portfolio_transaction(symbol: str, shares: float, buy_price: float) -> d
     Returns:
         Confirmation with updated holding information
     """
-    return portfolio_tools.add_portfolio_transaction(symbol, shares, buy_price)
+    return PortfolioService.add_transaction(symbol, shares, buy_price)
 
 
 @mcp.tool()
@@ -89,13 +84,13 @@ def manage_watchlist(action: str, symbol: str = "") -> dict:
     Returns:
         Watchlist status and current list of symbols
     """
-    return portfolio_tools.manage_watchlist(action, symbol)
+    return PortfolioService.manage_watchlist(action, symbol)
 
 
 def main():
     """Start the MCP server."""
     try:
-        print(f"Starting Financial & Portfolio Tracker MCP Server")
+        print("Starting Financial & Portfolio Tracker MCP Server")
         print(f"Host: {HOST}")
         print(f"Port: {PORT}")
         print("\nRegistered Tools:")
