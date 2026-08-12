@@ -1,5 +1,5 @@
-fastmcp>=2.0.0,<3.0.0
-yfinance==0.2.32
-pydantic==2.5.0
-python-dotenv==1.0.0
-requests==2.31.0
+fastmcp>=2.0.0
+yfinance>=0.2.32
+pydantic>=2.10
+python-dotenv>=1.0.0
+requests>=2.31.0
