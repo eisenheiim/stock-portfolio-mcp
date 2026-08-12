@@ -1,0 +1,35 @@
+name: Portfolio alerts
+
+on:
+  schedule:
+    # Hafta içi 10–18 Istanbul (UTC+3) ≈ 07–15 UTC, her 30 dk
+    - cron: "0,30 7-14 * * 1-5"
+  workflow_dispatch: {}   # elle çalıştırma butonu
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -r requirements.txt
+
+      - name: Write portfolio
+        run: |
+          mkdir -p data
+          echo '${{ secrets.PORTFOLIO_JSON }}' > data/portfolio.json
+
+      - name: Run alerts
+        env:
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          ALERT_EMAIL_TO: ${{ secrets.ALERT_EMAIL_TO }}
+          ALERT_MODE: all
+          ALERT_RISE_PCT: "3"
+          ALERT_SPIKE_PCT: "5"
+        run: python scripts/check_alerts.py
