@@ -2,9 +2,18 @@ name: Portfolio alerts
 
 on:
   schedule:
-    # Hafta içi 10–18 Istanbul (UTC+3) ≈ 07–15 UTC, her 30 dk
-    - cron: "0,30 7-14 * * 1-5"
-  workflow_dispatch: {}   # elle çalıştırma butonu
+    # Hafta içi 10:00–18:00 Istanbul (UTC+3) → 07:00–15:30 UTC
+    - cron: "0,30 7-15 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      seed:
+        description: "Mark current losers (run once before first scheduled alerts)"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
 
 jobs:
   check:
@@ -18,10 +27,32 @@ jobs:
 
       - run: pip install -r requirements.txt
 
-      - name: Write portfolio
+      # Remember alert state between runs (avoid duplicate emails)
+      - uses: actions/cache@v4
+        with:
+          path: data/alert_state.json
+          key: alert-state-${{ github.repository }}
+
+      - name: Write portfolio from secret
+        env:
+          PORTFOLIO_JSON: ${{ secrets.PORTFOLIO_JSON }}
         run: |
           mkdir -p data
-          echo '${{ secrets.PORTFOLIO_JSON }}' > data/portfolio.json
+          python - <<'PY'
+          import os, json, sys
+          raw = os.environ.get("PORTFOLIO_JSON", "")
+          if not raw.strip():
+              print("PORTFOLIO_JSON secret is empty", file=sys.stderr)
+              sys.exit(1)
+          data = json.loads(raw)
+          with open("data/portfolio.json", "w", encoding="utf-8") as f:
+              json.dump(data, f, ensure_ascii=False, indent=2)
+          print(f"portfolio.json written ({len(data.get('positions', []))} positions)")
+          PY
+
+      - name: Seed loss state (optional)
+        if: github.event.inputs.seed == 'true'
+        run: python scripts/check_alerts.py --seed
 
       - name: Run alerts
         env:
@@ -32,4 +63,6 @@ jobs:
           ALERT_MODE: all
           ALERT_RISE_PCT: "3"
           ALERT_SPIKE_PCT: "5"
+          ALERT_SPIKE_LOOKBACK_DAYS: "10"
+          ALERT_NEAR_LOW_PCT: "3"
         run: python scripts/check_alerts.py
